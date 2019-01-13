@@ -24,6 +24,9 @@ cardSuit (Card _ s) = s
 cardNumber :: Card -> Int
 cardNumber (Card n _) = n
 
+cardStrength :: Card -> Int
+cardStrength (Card n _) = n
+
 showCardNumber :: Int -> String
 showCardNumber 14 = "A_"
 showCardNumber 13 = "K_"
