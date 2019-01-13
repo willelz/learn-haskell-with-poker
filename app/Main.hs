@@ -1,6 +1,10 @@
 module Main where
+import           System.Random.Shuffle
+import           Data.List
+import           Cards
 
-import Lib
 
 main :: IO ()
-main = someFunc
+main = do
+  shuffled <- shuffleM allCards
+  print . sort . take 5 $ shuffled
