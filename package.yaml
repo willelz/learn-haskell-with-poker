@@ -28,7 +28,7 @@ library:
   source-dirs: src
 
 executables:
-  learn-haskell-with-poker-exe:
+  poker:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
