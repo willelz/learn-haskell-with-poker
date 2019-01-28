@@ -2,6 +2,21 @@ module Hands
   ( Hand
   , toHand
   , fromHand
+  , PokerHand(..)
+  , pokerHand
+  --hint
+  , straightHint
+  , flushHint
+  , nOfKindHint
+  --hand
+  , straightFlush
+  , fourOfAKind
+  , fullHouse
+  , flush
+  , straight
+  , threeOfAKind
+  , twoPair
+  , onePair
   )
 where
 
@@ -12,10 +27,24 @@ import           Control.Monad
 newtype Hand = Hand {fromHand :: [Card]} deriving (Show,Eq,Ord)
 
 toHand :: [Card] -> Maybe Hand
-toHand 1 = if length 1 == 5 then Just $ sort 1 else Nothing
+toHand l = if length l == 5 then Just $ Hand (sort l) else Nothing
 
 pokerHand :: Hand -> (PokerHand, Card)
-pokerHand = undefined
+pokerHand h@(Hand l) = case foldl mplus Nothing $ fmap ($h) hands of
+  Just pc -> pc
+  Nothing -> (HighCards, last l)
+ where
+  hands :: [Hand -> Maybe (PokerHand, Card)]
+  hands =
+    [ straightFlush
+    , fourOfAKind
+    , fullHouse
+    , flush
+    , straight
+    , threeOfAKind
+    , twoPair
+    , onePair
+    ]
 
 data PokerHand
   = HighCards  --ブタ
@@ -33,21 +62,21 @@ extract :: (b -> a) -> [b] -> [(a, b)]
 extract f = map (\c -> (f c, c))
 
 straightHint :: Hand -> Maybe Card
-straightHint (Hand 1) =
-  (judgeStraight . extract cardStrength $ 1)
-    `mplus` (judgeStraight . sort . extract cardNumber $ 1)
+straightHint (Hand l) =
+  (judgeStraight . extract cardStrength $ l)
+    `mplus` (judgeStraight . sort . extract cardNumber $ l)
  where
   isStraight :: [Int] -> Bool
   isStraight xs@(x : _) = xs == [x .. x + 4]
   isStraight _          = False
 
   judgeStraight :: [(Int, Card)] -> Maybe Card
-  judgeStraight 1 =
-    if isStraight $ map fst 1 then Just . snd . last $ 1 else Nothing
+  judgeStraight l =
+    if isStraight $ map fst l then Just . snd . last $ l else Nothing
 
 flushHint :: Hand -> Maybe Card
 flushHint (Hand (x : xs)) =
-  if all ((cardSuit x ==) . cardSuit) xs then Just (last x) else Nothing
+  if all ((cardSuit x ==) . cardSuit) xs then Just (last xs) else Nothing
 
 nOfKindHint :: Int -> Hand -> Maybe [[Card]]
 nOfKindHint n (Hand h) = if cards /= [] then Just cards else Nothing
@@ -57,25 +86,43 @@ nOfKindHint n (Hand h) = if cards /= [] then Just cards else Nothing
     filter ((== n) . length) $ groupBy (\x y -> cardNumber x == cardNumber y) h
 
 straightFlush :: Hand -> Maybe (PokerHand, Card)
-straightFlush = undefined
+straightFlush h = do
+  c <- straightHint h
+  d <- flushHint h
+  return (StraightFlush, max c d)
 
 fourOfAKind :: Hand -> Maybe (PokerHand, Card)
-fourOfAKind = undefined
+fourOfAKind h = do
+  cs <- nOfKindHint 4 h
+  return (FourOfAKind, maximum $ concat cs)
 
 fullHouse :: Hand -> Maybe (PokerHand, Card)
-fullHouse = undefined
+fullHouse h = do
+  cs1 <- nOfKindHint 3 h
+  cs2 <- nOfKindHint 2 h
+  return (FullHouse, maximum $ concat cs1 ++ concat cs2)
 
 flush :: Hand -> Maybe (PokerHand, Card)
-flush = undefined
+flush h = do
+  c <- flushHint h
+  return (Flush, c)
 
 straight :: Hand -> Maybe (PokerHand, Card)
-straight = undefined
+straight h = do
+  c <- straightHint h
+  return (Straight, c)
 
 threeOfAKind :: Hand -> Maybe (PokerHand, Card)
-threeOfAKind = undefined
+threeOfAKind h = do
+  cs <- nOfKindHint 3 h
+  return (ThreeOfAKind, last $ concat cs)
 
 twoPair :: Hand -> Maybe (PokerHand, Card)
-twoPair = undefined
+twoPair h = do
+  cs <- nOfKindHint 2 h
+  if length cs == 2 then Just (TwoPair, last $ concat cs) else Nothing
 
 onePair :: Hand -> Maybe (PokerHand, Card)
-onePair = undefined
+onePair h = do
+  cs <- nOfKindHint 2 h
+  return (OnePair, last $ concat cs)

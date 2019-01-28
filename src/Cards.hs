@@ -4,6 +4,8 @@ module Cards
   , allCards
   , cardSuit
   , cardNumber
+  , cardStrength
+  , showCardNumber
   )
 where
 
