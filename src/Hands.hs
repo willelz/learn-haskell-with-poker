@@ -98,9 +98,9 @@ fourOfAKind h = do
 
 fullHouse :: Hand -> Maybe (PokerHand, Card)
 fullHouse h = do
-  cs1 <- nOfKindHint 3 h
-  cs2 <- nOfKindHint 2 h
-  return (FullHouse, maximum $ concat cs1 ++ concat cs2)
+  cs <- nOfKindHint 3 h
+  nOfKindHint 2 h
+  return (FullHouse, last $ concat cs)
 
 flush :: Hand -> Maybe (PokerHand, Card)
 flush h = do
