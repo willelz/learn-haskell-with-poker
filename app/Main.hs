@@ -1,6 +1,8 @@
 module Main where
 import           System.Random.Shuffle
 import           Data.List
+import           Data.Maybe
+import           Control.Monad
 import           Safe
 import           Data.Char
 import           Cards
@@ -15,22 +17,37 @@ main = do
   deck <- shuffleM allCards
 
   case getHand deck of
-    Nothing           -> error "予期せぬエラー"
-    Just (hand, deck) -> playPoker hand deck
+    Nothing  -> error "予期せぬエラー : getHand in simpleGame"
+    Just res -> matchPoker res
   ynQuestion "-- もっかいやる？" main (putStrLn "-- またねノシノシ")
 
-playPoker :: Hand -> Deck -> IO ()
-playPoker hand deck = do
-  discards <- inputDisuse hand
+data Player = Player | Enemy deriving Eq
+
+showPlayerName :: Player -> String
+showPlayerName Player = "あなた"
+showPlayerName Enemy  = "あいて"
+
+matchPoker :: (Hand, Deck) -> IO ()
+matchPoker (mhand, deck) = do
+  (mres, ndeck, nmhand) <- playPoker mhand deck Player
+  case getHand ndeck of
+    Nothing             -> error "予期せぬエラー : getHand in matchPoker"
+    Just (ehand, odeck) -> do
+      (eres, _, nehand) <- playPoker ehand odeck Enemy
+      printResult nmhand nehand mres eres
+
+playPoker :: Hand -> Deck -> Player -> IO ((PokerHand, Card), Deck, Hand)
+playPoker hand deck player = do
+  discards <- if player == Player then inputDisuse hand else aiDisuse hand
   case drawHand deck discards hand of
-    Nothing         -> error "予期せぬエラー"
-    Just (nhand, _) -> do
-      printHand [] nhand
-      printResult $ pokerHand nhand
+    Nothing             -> error "予期せぬエラー : drawHand"
+    Just (nhand, ndeck) -> do
+      let res = pokerHand nhand
+      return (res, ndeck, nhand)
 
 inputDisuse :: Hand -> IO DiscardList
 inputDisuse hand = do
-  printHand [] hand
+  printHand [] hand Player
   putStrLn "-- 捨てるカードを選んでね"
   gotDisuse <- getDiscardList hand
   case gotDisuse of
@@ -38,15 +55,35 @@ inputDisuse hand = do
       putStrLn "-- 1~5の数値を並べて入力してね"
       inputDisuse hand
     Just disuses -> do
-      printHand disuses hand
-      ynQuestion "-- これでいい？" (return disuses) (inputDisuse hand)
+      printHand disuses hand Player
+      ynQuestion "-- あなた:これでいい？" (return disuses) (inputDisuse hand)
 
-printResult :: (PokerHand, Card) -> IO ()
-printResult (ph, card) = putStrLn
-  $ concat ["***** あなたの手札は ", show ph, " で、最強カードは ", show card, " でした*****"]
+aiDisuse :: Hand -> IO DiscardList
+aiDisuse hand = do
+  let res = aiSelectDiscards hand
+  printHand res hand Enemy
+  putStrLn "-- あいて:これでいいよ！"
+  return res
 
-printHand :: DiscardList -> Hand -> IO ()
-printHand dis hand = putStrLn $ "-- 手札 : " ++ showChangeHand dis hand
+printResult :: Hand -> Hand -> (PokerHand, Card) -> (PokerHand, Card) -> IO ()
+printResult mhand ehand mres@(mph, mcard) eres@(eph, ecard) = do
+  putStrLn " ***** 結果発表！！ *****"
+  printHand [] mhand Player
+  printHand [] ehand Enemy
+  putStrLn $ concat ["あなたの手札は ", show mph, " で、最強カードは ", show mcard, " でした"]
+  putStrLn $ concat ["あいての手札は ", show eph, " で、最強カードは ", show ecard, " でした"]
+  case judgeVictory mres eres of
+    LT -> putStrLn "あなたの負けです"
+    EQ -> putStrLn "引き分けです"
+    GT -> putStrLn "あなたの勝ちです"
+
+printHand :: DiscardList -> Hand -> Player -> IO ()
+printHand dis hand player =
+  putStrLn
+    $  "-- "
+    ++ showPlayerName player
+    ++ "の手札 : "
+    ++ showChangeHand dis hand
 
 ynQuestion :: String -> IO a -> IO a -> IO a
 ynQuestion s yes no = do
@@ -105,3 +142,22 @@ getDiscardList h = do
     intList <- toIntList input
     res     <- selectByIndexes (fromHand h) intList
     return res
+
+nOfKindDiscards :: Hand -> DiscardList
+nOfKindDiscards hand = filter (flip notElem $ allNOfKinds hand) $ fromHand hand
+ where
+  allNOfKinds :: Hand -> [Card]
+  allNOfKinds hand = concat . concat $ catMaybes
+    [nOfKindHint 2 hand, nOfKindHint 3 hand, nOfKindHint 4 hand]
+
+aiSelectDiscards :: Hand -> DiscardList
+aiSelectDiscards hand =
+  case straightHint hand `mplus` flushHint hand *> Just [] of
+    Nothing -> nOfKindDiscards hand
+    Just xs -> xs
+
+judgeVictory :: (PokerHand, Card) -> (PokerHand, Card) -> Ordering
+judgeVictory l r = compare (pullStrength l) (pullStrength r)
+ where
+  pullStrength :: (PokerHand, Card) -> (PokerHand, Int)
+  pullStrength = fmap cardStrength
