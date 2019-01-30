@@ -1,4 +1,4 @@
-module Hands
+module Game.Poker.Hands
   ( Hand
   , toHand
   , fromHand
@@ -17,12 +17,22 @@ module Hands
   , threeOfAKind
   , twoPair
   , onePair
+  --
+  , DiscardList
+  , Deck
+  , getHand
+  , drawHand
+  , getDiscardList
+  , judgeVictory
   )
 where
 
-import           Cards
+import           Game.Poker.Cards
 import           Data.List
 import           Control.Monad
+import           Control.Applicative
+import           Data.Char
+import           Safe
 
 newtype Hand = Hand {fromHand :: [Card]} deriving (Show,Eq,Ord)
 
@@ -58,9 +68,8 @@ data PokerHand
   | StraightFlush --ストレート・フラッシュ
   deriving (Show, Read, Eq, Ord, Enum)
 
-extract :: (b -> a) -> [b] -> [(a, b)]
-extract f = map (\c -> (f c, c))
 
+-- Hint
 straightHint :: Hand -> Maybe Card
 straightHint (Hand l) =
   (judgeStraight . extract cardStrength $ l)
@@ -85,6 +94,7 @@ nOfKindHint n (Hand h) = if cards /= [] then Just cards else Nothing
   cards =
     filter ((== n) . length) $ groupBy (\x y -> cardNumber x == cardNumber y) h
 
+-- PokerHand
 straightFlush :: Hand -> Maybe (PokerHand, Card)
 straightFlush h = do
   c <- straightHint h
@@ -126,3 +136,45 @@ onePair :: Hand -> Maybe (PokerHand, Card)
 onePair h = do
   cs <- nOfKindHint 2 h
   return (OnePair, last $ concat cs)
+
+--
+type DiscardList = [Card] --捨て札
+type Deck = [Card] --山札
+
+getHand :: Deck -> Maybe (Hand, Deck)
+getHand deck = do
+  hand <- toHand . take 5 $ deck
+  return (hand, drop 5 deck)
+
+drawHand :: Deck -> DiscardList -> Hand -> Maybe (Hand, Deck)
+drawHand deck dis h =
+  let nl = filter (flip notElem dis) (fromHand h)
+      nr = drop (5 - length nl) deck
+  in  (,) <$> toHand (take 5 $ nl ++ deck) <*> Just nr
+
+getDiscardList :: Hand -> IO (Maybe DiscardList)
+getDiscardList h = do
+  input <- getLine
+  return $ do
+    intList <- toIntList input
+    res     <- selectByIndexes (fromHand h) intList
+    return res
+
+judgeVictory :: (PokerHand, Card) -> (PokerHand, Card) -> Ordering
+judgeVictory l r = compare (pullStrength l) (pullStrength r)
+ where
+  pullStrength :: (PokerHand, Card) -> (PokerHand, Int)
+  pullStrength = fmap cardStrength
+
+-- helper
+extract :: (b -> a) -> [b] -> [(a, b)]
+extract f = map (\c -> (f c, c))
+
+toIntList :: String -> Maybe [Int]
+toIntList str = if and $ map isDigit str then Just $ reads str else Nothing
+ where
+  reads :: String -> [Int]
+  reads = map $ read . (: [])
+
+selectByIndexes :: [a] -> [Int] -> Maybe [a]
+selectByIndexes l = sequence . map ((atMay l) . (subtract 1))
